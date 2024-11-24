@@ -19,12 +19,11 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# Clona i repository necessari
 RUN git clone https://opendev.org/x/python-iotronicclient.git /opt/build/python-iotronicclient
 RUN git clone https://opendev.org/x/iotronic-ui.git /opt/build/iotronic-ui
 
-COPY ./python-iotronicclient /opt/build/python-iotronicclient
-COPY ./iotronic-ui /opt/build/iotronic-ui
-
+# Installa python-iotronicclient
 WORKDIR /opt/build/python-iotronicclient
 RUN pip3 install --upgrade pip \
  && pip3 install \
@@ -45,6 +44,7 @@ RUN pip3 install --upgrade pip \
        "pbr>=1.8" \
  && pip3 install .
 
+# Installa iotronic-ui
 WORKDIR /opt/build/iotronic-ui
 RUN pip3 install \
        "Django>=2.2.24" \
@@ -55,6 +55,7 @@ RUN pip3 install \
  && cp iotronic_ui/enabled/_6000_iot.py /usr/share/openstack-dashboard/openstack_dashboard/enabled/ \
  && cp iotronic_ui/enabled/_6* /usr/share/openstack-dashboard/openstack_dashboard/enabled/
 
+# Aggiungi lo script startUI
 COPY bin/startUI /usr/local/bin/startUI
 RUN chmod +x /usr/local/bin/startUI
 
