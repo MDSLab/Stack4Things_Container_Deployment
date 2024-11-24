@@ -19,6 +19,9 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+RUN git clone https://opendev.org/x/python-iotronicclient.git /opt/build/python-iotronicclient
+RUN git clone https://opendev.org/x/iotronic-ui.git /opt/build/iotronic-ui
+
 COPY ./python-iotronicclient /opt/build/python-iotronicclient
 COPY ./iotronic-ui /opt/build/iotronic-ui
 
