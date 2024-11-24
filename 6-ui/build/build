@@ -1,4 +1,0 @@
-#! /bin/bash
-
-VERSION="latest"
-docker build -t smartme/iotronic-ui:$VERSION .
