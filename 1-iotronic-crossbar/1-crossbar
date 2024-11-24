@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Configurazione
+CERT_PATH="/etc/ssl/iotronic/"
+CONTAINER_NAME="iotronic-crossbar"
+IMAGE_NAME="crossbario/crossbar:cpy3-20.2.1"
+CONFIG_FILE="confs/config.json"
+
+# Funzione per gestire errori
+function error_exit {
+    echo "Errore: $1"
+    exit 1
+}
+
+# Creazione del container
+echo "Creazione del container Docker..."
+docker create \
+    --name="$CONTAINER_NAME" \
+    --net=host \
+    --restart unless-stopped \
+    -p 8181:8181 \
+    -v crossbar_config:/node/.crossbar \
+    -v "$CERT_PATH:/node/.crossbar/ssl:ro" \
+    "$IMAGE_NAME" || error_exit "Impossibile creare il container Docker."
+
+# Copia del file di configurazione
+if [ -f "$CONFIG_FILE" ]; then
+    echo "Copia del file di configurazione nel container..."
+    docker cp "$CONFIG_FILE" "$CONTAINER_NAME:/node/.crossbar/" || error_exit "Errore durante la copia del file di configurazione."
+else
+    error_exit "Il file di configurazione $CONFIG_FILE non esiste."
+fi
+
+# Avvio del container
+echo "Avvio del container Docker..."
+docker start "$CONTAINER_NAME" || error_exit "Errore durante l'avvio del container Docker."
+
+echo "Container $CONTAINER_NAME creato e avviato con successo."

@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# Carica variabili dall'ENV file
+if [[ -f "keystone-config.env" ]]; then
+    export $(grep -v '^#' keystone-config.env | xargs)
+else
+    echo -e "\e[31m[ERROR]\e[0m File keystone-config.env non trovato! Crealo prima di eseguire questo script."
+    exit 1
+fi
+
+# Funzione per stampare messaggi di informazione
+function info {
+    echo -e "\e[34m[INFO]\e[0m $1"
+}
+
+# Funzione per stampare messaggi di errore
+function error_exit {
+    echo -e "\e[31m[ERROR]\e[0m $1"
+    exit 1
+}
+
+# Verifica che il container Keystone sia in esecuzione
+if ! docker ps --format '{{.Names}}' | grep -q "^$KEYSTONE_CONTAINER_NAME$"; then
+    error_exit "Il container $KEYSTONE_CONTAINER_NAME non è in esecuzione. Avvia il container prima di procedere."
+fi
+
+# Sincronizzazione del database Keystone
+info "Sincronizzazione del database Keystone..."
+docker exec "$KEYSTONE_CONTAINER_NAME" keystone-manage db_sync
+if [[ $? -ne 0 ]]; then
+    error_exit "Errore durante la sincronizzazione del database Keystone."
+fi
+sleep 2
+
+# Configurazione di Fernet Keys
+info "Configurazione delle Fernet Keys..."
+docker exec "$KEYSTONE_CONTAINER_NAME" keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+if [[ $? -ne 0 ]]; then
+    error_exit "Errore durante la configurazione delle Fernet Keys."
+fi
+sleep 2
+
+# Configurazione di Credential Keys
+info "Configurazione delle Credential Keys..."
+docker exec "$KEYSTONE_CONTAINER_NAME" keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
+if [[ $? -ne 0 ]]; then
+    error_exit "Errore durante la configurazione delle Credential Keys."
+fi
+sleep 2
+
+# Bootstrap di Keystone
+info "Bootstrap di Keystone..."
+docker exec "$KEYSTONE_CONTAINER_NAME" keystone-manage bootstrap --bootstrap-password "$ADMIN_PASS" \
+    --bootstrap-admin-url "$URL" \
+    --bootstrap-internal-url "$URL" \
+    --bootstrap-public-url "$URL" \
+    --bootstrap-region-id "$REGION_NAME"
+if [[ $? -ne 0 ]]; then
+    error_exit "Errore durante il bootstrap di Keystone."
+fi
+sleep 2
+
+# Riavvio del container Keystone
+info "Riavvio del container Keystone..."
+docker restart "$KEYSTONE_CONTAINER_NAME"
+if [[ $? -ne 0 ]]; then
+    error_exit "Errore durante il riavvio del container Keystone."
+fi
+sleep 5
+
+# Creazione del progetto di servizio
+info "Creazione del progetto di servizio..."
+docker exec "$KEYSTONE_CONTAINER_NAME" openstack project create --domain default \
+    --description "$SERVICE_PROJECT_DESCRIPTION" "$SERVICE_PROJECT_NAME"
+if [[ $? -ne 0 ]]; then
+    error_exit "Errore durante la creazione del progetto di servizio."
+fi
+
+info "Configurazione completata con successo."

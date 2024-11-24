@@ -1,0 +1,22 @@
+#! /bin/bash
+
+
+#if [ "$EUID" -ne 0 ]
+#  then echo "Please run as root"
+#  exit
+#cfi
+
+RABBIT_PASS="smartme"
+
+docker run -d \
+ --name=rabbitmq\
+ -p 5672:5672 \
+ --network=iotronic_network \
+ --restart unless-stopped \
+rabbitmq:3
+
+sleep 30
+docker exec rabbitmq rabbitmqctl add_user openstack $RABBIT_PASS
+docker exec rabbitmq rabbitmqctl set_permissions openstack ".*" ".*" ".*"
+
+echo -e "\e[32mCompleted \e[0m"

@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Configurazione
+VERSION=1.0.11
+CERT_PATH="/etc/ssl/iotronic/"
+DOCKER_IMAGE="s4t/iotronic-wstun:$VERSION"
+RANGE="50000-50100:50000-50100"
+
+# Funzione per gestire errori
+function error_exit {
+    echo "Errore: $1"
+    exit 1
+}
+
+# Costruisce l'immagine Docker
+echo "Costruzione dell'immagine Docker..."
+docker build -t "$DOCKER_IMAGE" . || error_exit "Errore durante la build dell'immagine Docker."
+
+# Avvio del container Docker
+echo "Avvio del container Docker..."
+docker run -d \
+    --name=iotronic-wstun \
+    --net=host \
+    --restart unless-stopped \
+    -p 8080:8080 \
+    -p "$RANGE" \
+    -v "$CERT_PATH:/var/lib/iotronic/ssl/:ro" \
+    "$DOCKER_IMAGE" || error_exit "Errore durante l'avvio del container Docker."
+
+echo "Container iotronic-wstun avviato con successo."
