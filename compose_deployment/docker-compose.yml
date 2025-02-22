@@ -188,19 +188,16 @@ services:
       - "5672:5672"
     environment:
       RABBIT_PASS: "unime"
+    volumes:
+      - ./conf-rabbit-script.sh:/docker-entrypoint-initRabbit.sh
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 10s
       retries: 5
       start_period: 20s
       timeout: 5s
+    command: ["/bin/bash", "/docker-entrypoint-initRabbit.sh"]
     entrypoint: ["/bin/bash", "-c"]
-    command: |
-      rabbitmq-server &
-      sleep 30 &&
-      rabbitmqctl add_user openstack unime &&
-      rabbitmqctl set_permissions openstack ".*" ".*" ".*" &&
-      wait -n
 
   keystone:
     image: lucadagati/iotronic-keystone
