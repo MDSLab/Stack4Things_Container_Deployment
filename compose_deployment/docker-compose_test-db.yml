@@ -5,7 +5,7 @@ services:
     image: debian:buster
     container_name: ca_service
     networks:
-      - s4t
+      - iotronic_network
     volumes:
       - iotronic_ssl:/etc/ssl/iotronic  # Condiviso con iotronic-wstun
     entrypoint: ["/bin/bash", "-c"]
@@ -39,7 +39,7 @@ services:
     container_name: crossbar
     restart: unless-stopped
     networks:
-      - s4t
+      - iotronic_network
     volumes:
       - iotronic_ssl:/node/.crossbar/ssl  # Condiviso con iotronic-wstun
       - crossbar_data:/node/.crossbar
@@ -119,7 +119,7 @@ services:
     container_name: iotronic-wstun
     restart: unless-stopped
     networks:
-      - s4t
+      - iotronic_network
     ports:
       - "8080:8080"
       - "50000-50100:50000-50100"
@@ -143,37 +143,13 @@ services:
         echo "[INFO] Avvio di iotronic-wstun..."
         exec node /usr/local/lib/node_modules/@mdslab/wstun/bin/wstun.js -r -s 8080 --ssl=true --key=/var/lib/iotronic/ssl/iotronic_CA.key --cert=/var/lib/iotronic/ssl/iotronic_CA.pem
 
-  iotronic-db:
-    image: mariadb:focal
-    container_name: iotronic-db
-    restart: unless-stopped
-    networks:
-      - s4t
-    environment:
-      MYSQL_ROOT_PASSWORD: "unime"
-      MYSQL_DATABASE: "unime"
-      MYSQL_USER: "admin"
-      MYSQL_PASSWORD: "s4t"
-    ports:
-      - "3306:3306"
-    volumes:
-      - unime_test_iotronic_db_data:/var/lib/mysql
-      - unime_test_iotronic_db_config:/etc/mysql
-      - ./create_dbs.sql:/docker-entrypoint-initdb.d/create_dbs.sql
-      - ./99-openstack.conf:/etc/mysql/99-openstack.cnf
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-punime"]
-      interval: 10s
-      retries: 5
-      start_period: 20s
-      timeout: 5s
 
   rabbitmq:
     image: rabbitmq:3
     container_name: rabbitmq
     restart: unless-stopped
     networks:
-      - s4t
+      - iotronic_network
     ports:
       - "5672:5672"
     environment:
@@ -198,12 +174,10 @@ services:
     container_name: keystone
     restart: unless-stopped
     depends_on:
-      iotronic-db:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
-      - s4t
+      - iotronic_network
     environment:
       # Credenziali admin e impostazioni Keystone
       ADMIN_PASS: "s4t"
@@ -219,7 +193,7 @@ services:
       KEYSTONE_DB_USER: "keystone"
       KEYSTONE_DBPASS: "unime"
 
-      DB_HOST: "iotronic-db"
+      DB_HOST: "unime_test_iotronic_db"
       RABBIT_PASS: "unime"
       REGION_NAME: "RegionOne"
     ports:
@@ -232,12 +206,12 @@ services:
     command: >
       /bin/bash -c "
       echo '[INFO] Attesa del database Keystone...';
-      until mysql -h iotronic-db -uroot -punime -e 'SELECT 1' >/dev/null 2>&1; do
+      until mysql -h unime_test_iotronic_db -uroot -punime -e 'SELECT 1' >/dev/null 2>&1; do
         echo '[INFO] Database non ancora pronto, riprovo...';
         sleep 5;
       done;
       echo '[INFO] Database pronto!';
-      mysql -u root -punime -h iotronic-db -e \"CREATE DATABASE IF NOT EXISTS keystone;
+      mysql -u root -punime -h unime_test_iotronic_db -e \"CREATE DATABASE IF NOT EXISTS keystone;
       CREATE DATABASE IF NOT EXISTS iotronic;
       DROP USER IF EXISTS 'keystone'@'localhost';
       DROP USER IF EXISTS 'keystone'@'%';
@@ -281,37 +255,18 @@ services:
       su -s /bin/sh -c 'keystone-manage credential_setup --keystone-user keystone --keystone-group keystone' keystone;
       echo '[INFO] Bootstrap di Keystone...';
       su -s /bin/sh -c 'keystone-manage bootstrap --bootstrap-password s4t --bootstrap-admin-url http://keystone:5000/v3 --bootstrap-internal-url http://keystone:5000/v3 --bootstrap-public-url http://keystone:5000/v3 --bootstrap-region-id RegionOne' keystone;
-      exec apache2ctl -D FOREGROUND &
-      sleep 20; 
-      echo '[INFO] Creazione dei servizi di Iotronic...';
-      su -s /bin/sh -c 'openstack project create --domain default --description \"Service Project\" service' keystone;
-      su -s /bin/sh -c 'openstack service create iot --name Iotronic' keystone;
-      echo '[INFO] Iotronic User Create...';
-      su -s /bin/sh -c 'openstack user create --password unime iotronic' keystone;
-      echo '[INFO] Iotronic roles...';
-      su -s /bin/sh -c 'openstack role add --project service --user iotronic admin' keystone;
-      su -s /bin/sh -c 'openstack role create admin_iot_project' keystone;
-      su -s /bin/sh -c 'openstack role create manager_iot_project' keystone;
-      su -s /bin/sh -c 'openstack role create admin_iot_project' keystone;
-      su -s /bin/sh -c 'openstack role create user_iot' keystone;
-      su -s /bin/sh -c 'openstack role add --project service --user iotronic admin_iot_project' keystone;
-      su -s /bin/sh -c 'openstack role add --project admin --user admin admin_iot_project' keystone;
-      echo '[INFO] Iotronic endpoints...';
-      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot public controller:8812' keystone;
-      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot internal iotronic-conductor:8812' keystone;
-      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot admin iotronic-conductor:8812' keystone;
-      su -s /bin/sh -c 'sleep infinity' keystone;"
+      exec apache2ctl -D FOREGROUND"
 
   iotronic-conductor:
     image: lucadagati/iotronic-conductor:latest
     container_name: iotronic-conductor
     restart: unless-stopped
     networks:
-      - s4t
+      - iotronic_network
     environment:
       # Credenziali DB Iotronic
-      MYSQL_ROOT_PASSWORD: "s4t"
-      DB_HOST: "iotronic-db"
+      MYSQL_ROOT_PASSWORD: "unime"
+      DB_HOST: "unime_test_iotronic_db"
       IOTRONIC_DB_NAME: "iotronic"
       IOTRONIC_DB_USER: "iotronic"
       IOTRONIC_DBPASS: "unime"
@@ -325,7 +280,7 @@ services:
       OS_PROJECT_DOMAIN_NAME: "Default"
 
       # Stringa di connessione
-      DB_CONNECTION_STRING: "mysql+pymysql://iotronic:unime@iotronic-db/iotronic"
+      DB_CONNECTION_STRING: "mysql+pymysql://iotronic:unime@unime_test_iotronic_db/iotronic"
     ports:
       - "8812:8812"
     volumes:
@@ -334,7 +289,7 @@ services:
     command: >
       /bin/bash -c "
         echo '[INFO] Attesa del database MySQL...';
-        until mysql -h iotronic-db -uroot -punime -e 'SELECT 1' >/dev/null 2>&1; do
+        until mysql -h unime_test_iotronic_db -uroot -punime -e 'SELECT 1' >/dev/null 2>&1; do
           echo '[INFO] Database non ancora pronto, riprovo...';
           sleep 5;
         done;
@@ -349,14 +304,14 @@ services:
     container_name: iotronic-wagent
     restart: unless-stopped
     networks:
-      - s4t
+      - iotronic_network
     environment:
       # DB info
-      MYSQL_ROOT_PASSWORD: "s4t"
-      DB_HOST: "iotronic-db"
+      MYSQL_ROOT_PASSWORD: "unime"
+      DB_HOST: "unime_test_iotronic_db"
 
       # Stringa di connessione
-      DB_CONNECTION_STRING: "mysql+pymysql://iotronic:unime@iotronic-db/iotronic"
+      DB_CONNECTION_STRING: "mysql+pymysql://iotronic:unime@unime_test_iotronic_db/iotronic"
 
       # Credenziali OpenStack
       OS_AUTH_URL: "http://keystone:5000/v3"
@@ -380,7 +335,7 @@ services:
     container_name: iotronic-ui
     restart: unless-stopped
     networks:
-      - s4t
+      - iotronic_network
     ports:
       - "8585:80"
     volumes:
@@ -389,7 +344,7 @@ services:
       - ./conf_ui:/etc/openstack-dashboard  # <--- Monta tutta la cartella
 
 networks:
-  s4t:
+  iotronic_network:
     driver: bridge
 
 volumes:
@@ -401,5 +356,3 @@ volumes:
   crossbar_data:
   ca_data:
   iotronic_ssl:
-  unime_test_iotronic_db_data:
-  unime_test_iotronic_db_config:
