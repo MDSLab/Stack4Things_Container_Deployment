@@ -187,7 +187,7 @@ services:
     ports:
       - "5672:5672"
     environment:
-      RABBIT_PASS: "unime"
+      RABBITMQ_PASS: "unime"
     volumes:
       - ./conf-rabbit-script.sh:/docker-entrypoint-initRabbit.sh
     healthcheck:
@@ -196,8 +196,13 @@ services:
       retries: 5
       start_period: 20s
       timeout: 5s
-    command: ["/bin/bash", "/docker-entrypoint-initRabbit.sh"]
     entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        chmod +x /docker-entrypoint-initRabbit.sh
+        /bin/bash /docker-entrypoint-initRabbit.sh
+
+
 
   keystone:
     image: lucadagati/iotronic-keystone

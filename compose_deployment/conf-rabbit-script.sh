@@ -6,6 +6,8 @@ rabbitmq-server &
 # Attendi che RabbitMQ sia pronto
 sleep 30  
 
+rabbitmqctl start_app
+
 # Aggiungi l'utente OpenStack
 rabbitmqctl add_user openstack unime || echo "Utente già esistente"
 echo "USER openstack added"
