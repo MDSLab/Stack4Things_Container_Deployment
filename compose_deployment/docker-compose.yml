@@ -98,10 +98,10 @@ services:
                         "options":{
                                 "enable_webstatus": true,
                                 "fail_by_drop": true,
-                                "open_handshake_timeout": 2500,
+                                "open_handshake_timeout": 5500,
                                 "close_handshake_timeout": 1000,
                                 "auto_ping_interval": 30000,
-                                "auto_ping_timeout": 5000,
+                                "auto_ping_timeout": 10000,
                                 "auto_ping_size": 13
                         }
                     }
@@ -165,7 +165,7 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-punime"]
       interval: 10s
       retries: 5
-      start_period: 20s
+      start_period: 40s
       timeout: 5s
 
   rabbitmq:
@@ -297,9 +297,9 @@ services:
       su -s /bin/sh -c 'openstack role add --project service --user iotronic admin_iot_project' keystone;
       su -s /bin/sh -c 'openstack role add --project admin --user admin admin_iot_project' keystone;
       echo '[INFO] Iotronic endpoints...';
-      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot public controller:8812' keystone;
-      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot internal iotronic-conductor:8812' keystone;
-      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot admin iotronic-conductor:8812' keystone;
+      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot public http://iotronic-conductor:8812' keystone;
+      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot internal http://iotronic-conductor:8812' keystone;
+      su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot admin http://iotronic-conductor:8812' keystone;
       su -s /bin/sh -c 'sleep infinity' keystone;"
 
   iotronic-conductor:
