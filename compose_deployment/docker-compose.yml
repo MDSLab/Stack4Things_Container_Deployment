@@ -98,11 +98,11 @@ services:
                         "options":{
                                 "enable_webstatus": true,
                                 "fail_by_drop": true,
-                                "open_handshake_timeout": 5500,
-                                "close_handshake_timeout": 1000,
-                                "auto_ping_interval": 30000,
+                                "open_handshake_timeout": 5000,
+                                "close_handshake_timeout": 2000,
+                                "auto_ping_interval": 50000,
                                 "auto_ping_timeout": 10000,
-                                "auto_ping_size": 13
+                                "auto_ping_size": 15
                         }
                     }
                  ]
@@ -157,40 +157,67 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - unime_test_iotronic_db_data:/var/lib/mysql
-      - unime_test_iotronic_db_config:/etc/mysql
-      - ./create_dbs.sql:/docker-entrypoint-initdb.d/create_dbs.sql
-      - ./99-openstack.conf:/etc/mysql/99-openstack.cnf
+      - unime_iotronic_db_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-punime"]
       interval: 10s
       retries: 5
       start_period: 40s
       timeout: 5s
+    command: >
+      mysqld
+      --bind-address=0.0.0.0
+      --max_connections=4096
+      --collation-server=utf8_general_ci
+      --character-set-server=utf8
+      --innodb-buffer-pool-size=1G
+      --innodb-flush-log-at-trx-commit=1
+      --innodb-file-per-table=1
 
+          
   rabbitmq:
-    image: rabbitmq:3
+    image: rabbitmq:3.7-management
     container_name: rabbitmq
-    restart: unless-stopped
-    networks:
-      - s4t
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: openstack
+      RABBITMQ_DEFAULT_PASS: unime
     ports:
       - "5672:5672"
-    environment:
-      RABBIT_PASS: "unime"
+      - "15672:15672"
     volumes:
-      - ./conf-rabbit-script.sh:/docker-entrypoint-initRabbit.sh
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - s4t
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 10s
       retries: 5
-      start_period: 20s
-      timeout: 5s
-    entrypoint: ["/bin/bash", "-c"]
-    command: 
-      - |
-        chmod +x /docker-entrypoint-initRabbit.sh
-        /bin/bash /docker-entrypoint-initRabbit.sh
+      start_period: 10s
+
+  rabbitmq-setup:
+    image: rabbitmq:3.7-management
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - s4t
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      echo 'Aspettando RabbitMQ...';
+      for i in {1..30}; do
+        if rabbitmqctl status; then
+          echo 'RabbitMQ è pronto!';
+          break;
+        fi
+        echo 'RabbitMQ non ancora pronto, riprovo in 5 secondi...';
+        sleep 5;
+      done;
+      echo "Configurazione dell'utente openstack...";
+      rabbitmqctl add_user openstack unime;
+      rabbitmqctl set_permissions openstack '.*' '.*' '.*';
+      rabbitmqctl set_user_tags openstack administrator;
+      echo 'Utente openstack creato con successo.';
 
 
   keystone:
@@ -205,7 +232,6 @@ services:
     networks:
       - s4t
     environment:
-      # Credenziali admin e impostazioni Keystone
       ADMIN_PASS: "s4t"
       OS_USERNAME: "admin"
       OS_PASSWORD: "s4t"
@@ -237,75 +263,82 @@ services:
         sleep 5;
       done;
       echo '[INFO] Database pronto!';
+
+      echo '[INFO] Configurazione del database Keystone...';
       mysql -u root -punime -h iotronic-db -e \"CREATE DATABASE IF NOT EXISTS keystone;
       CREATE DATABASE IF NOT EXISTS iotronic;
-      DROP USER IF EXISTS 'keystone'@'localhost';
-      DROP USER IF EXISTS 'keystone'@'%';
-      CREATE USER 'keystone'@'localhost' IDENTIFIED BY 'unime';
-      CREATE USER 'keystone'@'%' IDENTIFIED BY 'unime';
-      GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost';
+      CREATE USER IF NOT EXISTS 'keystone'@'%' IDENTIFIED BY 'unime';
+      CREATE USER IF NOT EXISTS 'iotronic'@'%' IDENTIFIED BY 'unime';
       GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%';
-      DROP USER IF EXISTS 'iotronic'@'localhost';
-      DROP USER IF EXISTS 'iotronic'@'%';
-      CREATE USER 'iotronic'@'localhost' IDENTIFIED BY 'unime';
-      CREATE USER 'iotronic'@'%' IDENTIFIED BY 'unime';
-      GRANT ALL PRIVILEGES ON iotronic.* TO 'iotronic'@'localhost';
       GRANT ALL PRIVILEGES ON iotronic.* TO 'iotronic'@'%';
-      FLUSH PRIVILEGES;\";
+      FLUSH PRIVILEGES;\"
+
+      
       echo '[INFO] Creazione delle cartelle per le chiavi Fernet e credenziali...';
       mkdir -p /etc/keystone/fernet-keys;
       mkdir -p /etc/keystone/credential-keys;
       chown -R keystone:keystone /etc/keystone;
 
-      echo '[INFO] Verifica delle chiavi Fernet...';
+      echo '[INFO] Controllo chiavi Fernet...';
       if [ ! -f /etc/keystone/fernet-keys/0 ]; then
         echo '[INFO] Nessuna chiave Fernet trovata, eseguo fernet_setup...';
         su -s /bin/sh -c 'keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone' keystone;
       else
-        echo '[INFO] Chiavi Fernet già presenti.';
+        echo '[INFO] Chiavi Fernet già presenti, salto la generazione.';
       fi
 
-      echo '[INFO] Verifica delle credenziali crittografate...';
+      echo '[INFO] Controllo chiavi di credenziali crittografate...';
       if [ ! -f /etc/keystone/credential-keys/0 ]; then
         echo '[INFO] Nessuna chiave di credenziali trovata, eseguo credential_setup...';
         su -s /bin/sh -c 'keystone-manage credential_setup --keystone-user keystone --keystone-group keystone' keystone;
       else
-        echo '[INFO] Chiavi di credenziali già presenti.';
+        echo '[INFO] Chiavi di credenziali già presenti, salto la generazione.';
       fi
 
       echo '[INFO] Sincronizzazione delle tabelle di Keystone...';
       su -s /bin/sh -c 'keystone-manage db_sync' keystone;
-      echo '[INFO] Configurazione dei token Fernet...';
-      su -s /bin/sh -c 'keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone' keystone;
-      echo '[INFO] Configurazione delle credenziali crittografate...';
-      su -s /bin/sh -c 'keystone-manage credential_setup --keystone-user keystone --keystone-group keystone' keystone;
+
       echo '[INFO] Bootstrap di Keystone...';
       su -s /bin/sh -c 'keystone-manage bootstrap --bootstrap-password s4t --bootstrap-admin-url http://keystone:5000/v3 --bootstrap-internal-url http://keystone:5000/v3 --bootstrap-public-url http://keystone:5000/v3 --bootstrap-region-id RegionOne' keystone;
-      exec apache2ctl -D FOREGROUND &
-      sleep 20; 
+
+      echo '[INFO] Verifica e avvio di Apache...';
+      if ! pgrep -x "apache2" > /dev/null; then
+        echo '[INFO] Apache non è in esecuzione, lo avvio...';
+        exec apache2ctl -D FOREGROUND &
+      else
+        echo '[INFO] Apache è già in esecuzione.';
+      fi
+
       echo '[INFO] Creazione dei servizi di Iotronic...';
       su -s /bin/sh -c 'openstack project create --domain default --description \"Service Project\" service' keystone;
       su -s /bin/sh -c 'openstack service create iot --name Iotronic' keystone;
       echo '[INFO] Iotronic User Create...';
       su -s /bin/sh -c 'openstack user create --password unime iotronic' keystone;
+      
       echo '[INFO] Iotronic roles...';
       su -s /bin/sh -c 'openstack role add --project service --user iotronic admin' keystone;
       su -s /bin/sh -c 'openstack role create admin_iot_project' keystone;
       su -s /bin/sh -c 'openstack role create manager_iot_project' keystone;
-      su -s /bin/sh -c 'openstack role create admin_iot_project' keystone;
       su -s /bin/sh -c 'openstack role create user_iot' keystone;
       su -s /bin/sh -c 'openstack role add --project service --user iotronic admin_iot_project' keystone;
       su -s /bin/sh -c 'openstack role add --project admin --user admin admin_iot_project' keystone;
+
       echo '[INFO] Iotronic endpoints...';
       su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot public http://iotronic-conductor:8812' keystone;
       su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot internal http://iotronic-conductor:8812' keystone;
       su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot admin http://iotronic-conductor:8812' keystone;
-      su -s /bin/sh -c 'sleep infinity' keystone;"
+
+      exec tail -f /dev/null"
 
   iotronic-conductor:
     image: lucadagati/iotronic-conductor:latest
     container_name: iotronic-conductor
     restart: unless-stopped
+    depends_on:
+      iotronic-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - s4t
     environment:
@@ -333,8 +366,9 @@ services:
       - iotronic_logs:/var/log/iotronic
     command: >
       /bin/bash -c "
+        apt-get update && apt-get install -y mysql-client nano;
         echo '[INFO] Attesa del database MySQL...';
-        until mysql -h iotronic-db -uroot -punime -e 'SELECT 1' >/dev/null 2>&1; do
+        until mysql -h iotronic-db -uiotronic -punime -e 'SELECT 1' >/dev/null 2>&1; do
           echo '[INFO] Database non ancora pronto, riprovo...';
           sleep 5;
         done;
@@ -342,12 +376,17 @@ services:
         echo '[INFO] Configurazione dei permessi sui log...';
         chown -R iotronic:iotronic /var/log/iotronic;
         echo '[INFO] Avvio di Iotronic Conductor...';
-        iotronic-conductor"
+        exec /usr/local/bin/startConductor"
 
-  wagent:
+  iotronic-wagent:
     image: lucadagati/iotronic-wagent:latest
     container_name: iotronic-wagent
     restart: unless-stopped
+    depends_on:
+      iotronic-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - s4t
     environment:
@@ -379,10 +418,15 @@ services:
     image: lucadagati/iotronic-ui:latest
     container_name: iotronic-ui
     restart: unless-stopped
+    depends_on:
+      iotronic-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - s4t
     ports:
-      - "8585:80"
+      - "80:80"
     volumes:
       - iotronic-ui_config:/etc/openstack-dashboard
       - iotronic-ui_logs:/var/log/apache2
@@ -401,5 +445,6 @@ volumes:
   crossbar_data:
   ca_data:
   iotronic_ssl:
-  unime_test_iotronic_db_data:
-  unime_test_iotronic_db_config:
+  unime_iotronic_db_data:
+  rabbitmq_data:
+
