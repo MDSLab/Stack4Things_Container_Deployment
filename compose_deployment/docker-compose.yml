@@ -258,6 +258,7 @@ services:
     command: >
       /bin/bash -c "
       echo '[INFO] Attesa del database Keystone...';
+      chmod 777 /var/log/keystone/keystone-manage.log;
       until mysql -h iotronic-db -uroot -punime -e 'SELECT 1' >/dev/null 2>&1; do
         echo '[INFO] Database non ancora pronto, riprovo...';
         sleep 5;

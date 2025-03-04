@@ -1,7 +1,0 @@
-- project:
-    templates:
-      - openstack-python38-jobs-no-constraints
-      - openstack-python37-jobs-no-constraints
-      - openstack-python36-jobs-no-constraints
-      - check-requirements
-      - publish-to-pypi
