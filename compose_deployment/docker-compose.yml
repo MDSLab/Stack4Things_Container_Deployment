@@ -253,7 +253,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-    #  - ./conf_keystone:/etc/keystone
+      - ./conf_keystone:/etc/keystone
       - keystone_data:/var/lib/keystone
       - /var/log/keystone:/var/log/keystone
       - /var/log/keystone-api:/var/log/apache2
