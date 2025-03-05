@@ -257,6 +257,12 @@ services:
       - keystone_data:/var/lib/keystone
       - /var/log/keystone:/var/log/keystone
       - /var/log/keystone-api:/var/log/apache2
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/keystone-setup-done"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     command: >
       /bin/bash -c "
       echo '[INFO] Attesa del database Keystone...';
@@ -331,6 +337,9 @@ services:
       su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot public http://iotronic-conductor:8812' keystone;
       su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot internal http://iotronic-conductor:8812' keystone;
       su -s /bin/sh -c 'openstack endpoint create --region RegionOne iot admin http://iotronic-conductor:8812' keystone;
+      echo '[INFO] End of configuration!';  
+      
+      touch /tmp/keystone-setup-done;  
 
       exec tail -f /dev/null"
 
@@ -342,6 +351,8 @@ services:
       iotronic-db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      keystone:
         condition: service_healthy
     networks:
       - s4t
