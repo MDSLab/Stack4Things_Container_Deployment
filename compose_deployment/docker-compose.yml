@@ -379,6 +379,12 @@ services:
     volumes:
       - ./conf_conductor:/etc/iotronic
       - iotronic_logs:/var/log/iotronic
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/conductor-setup-done"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     command: >
       /bin/bash -c "
         apt-get update && apt-get install -y mysql-client nano;
@@ -391,6 +397,9 @@ services:
         echo '[INFO] Configurazione dei permessi sui log...';
         chown -R iotronic:iotronic /var/log/iotronic;
         echo '[INFO] Avvio di Iotronic Conductor...';
+        echo '[INFO] End of configuration!';  
+      
+        touch /tmp/conductor-setup-done;  
         exec /usr/local/bin/startConductor"
 
   iotronic-wagent:
@@ -401,6 +410,8 @@ services:
       iotronic-db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      iotronic-conductor:
         condition: service_healthy
     networks:
       - s4t
