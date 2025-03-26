@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Installazione delle dipendenze di sistema e configurazione iniziale
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        nano \
         software-properties-common \
         locales \
         tzdata \
@@ -28,11 +29,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Clonazione del repository iotronic
-WORKDIR /opt/build/
-RUN git clone https://opendev.org/x/iotronic.git
+# Copia del repository iotronic nel container
+COPY ./iotronic /opt/build/iotronic
 
-# Impostazione della directory di lavoro
+# Imposta la directory di lavoro
 WORKDIR /opt/build/iotronic
 
 # Installazione di Python e pacchetti richiesti
@@ -64,7 +64,8 @@ RUN useradd -m -d /var/lib/iotronic iotronic \
     && mkdir -p /var/log/iotronic \
     && touch /var/log/iotronic/iotronic-wagent.log \
     && chown -R iotronic:iotronic /var/log/iotronic/
-
+    && sed -i "s/\.with_lockmode('update')/.with_for_update()/g" $(find /usr/local/lib -type f -path "*iotronic/db/sqlalchemy/api.py")
+    
 # Monta volumi per configurazione e log
 VOLUME ["/etc/iotronic", "/var/log/iotronic"]
 

@@ -9,6 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Installazione delle dipendenze di sistema e configurazione iniziale
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        nano \
+        mysql-client \
         software-properties-common \
         locales \
         tzdata \
@@ -38,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
 
 # Copia del repository iotronic nel container
-COPY ./../iotronic /opt/build/iotronic
+COPY ./iotronic /opt/build/iotronic
 
 # Imposta la directory di lavoro
 WORKDIR /opt/build/iotronic
@@ -74,7 +76,9 @@ RUN useradd -m -d /var/lib/iotronic iotronic \
     && touch /var/log/iotronic/iotronic-conductor.log \
     && touch /var/log/iotronic/iotronic-api_error.log \
     && touch /var/log/iotronic/iotronic-api_access.log \
-    && chown -R iotronic:iotronic /var/log/iotronic/
+    && chown -R iotronic:iotronic /var/log/iotronic/ \
+    && sed -i "s/\.with_lockmode('update')/.with_for_update()/g" $(find /usr/local/lib -type f -path "*iotronic/db/sqlalchemy/api.py")
+
 
 # Configurazione di Apache
 RUN cp etc/apache2/iotronic.conf /etc/apache2/sites-available/iotronic.conf \
