@@ -63,7 +63,7 @@ RUN pip3 install --upgrade pip setuptools-rust \
 RUN useradd -m -d /var/lib/iotronic iotronic \
     && mkdir -p /var/log/iotronic \
     && touch /var/log/iotronic/iotronic-wagent.log \
-    && chown -R iotronic:iotronic /var/log/iotronic/
+    && chown -R iotronic:iotronic /var/log/iotronic \
     && sed -i "s/\.with_lockmode('update')/.with_for_update()/g" $(find /usr/local/lib -type f -path "*iotronic/db/sqlalchemy/api.py")
     
 # Monta volumi per configurazione e log
